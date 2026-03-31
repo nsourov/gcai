@@ -1,16 +1,13 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
-	"syscall"
 
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 
 	"github.com/nsourov/gcai/internal/config"
 	commitgit "github.com/nsourov/gcai/internal/git"
@@ -133,32 +130,46 @@ func runInit(force bool) error {
 		return errors.New("config already exists; re-run with `gcai --init --force` to overwrite")
 	}
 
-	reader := bufio.NewReader(os.Stdin)
+	answers := struct {
+		APIKey  string
+		BaseURL string
+		Model   string
+	}{}
 
-	fmt.Print("Enter API key (OpenAI/OpenRouter-compatible): ")
-	keyBytes, err := term.ReadPassword(int(syscall.Stdin))
-	fmt.Println()
-	if err != nil {
-		return fmt.Errorf("read API key: %w", err)
-	}
-	apiKey := strings.TrimSpace(string(keyBytes))
-	if apiKey == "" {
-		return errors.New("API key cannot be empty")
+	questions := []*survey.Question{
+		{
+			Name: "APIKey",
+			Prompt: &survey.Password{
+				Message: "API key (OpenAI/OpenRouter-compatible):",
+			},
+			Validate: survey.Required,
+		},
+		{
+			Name: "BaseURL",
+			Prompt: &survey.Input{
+				Message: "Base URL:",
+				Default: fallback(cfg.BaseURL, defaultBaseURL),
+			},
+			Validate: survey.Required,
+		},
+		{
+			Name: "Model",
+			Prompt: &survey.Input{
+				Message: "Model:",
+				Default: fallback(cfg.Model, defaultModel),
+			},
+			Validate: survey.Required,
+		},
 	}
 
-	baseURL, err := promptWithDefault(reader, "Base URL", fallback(cfg.BaseURL, defaultBaseURL))
-	if err != nil {
-		return err
-	}
-	model, err := promptWithDefault(reader, "Model", fallback(cfg.Model, defaultModel))
-	if err != nil {
-		return err
+	if err := survey.Ask(questions, &answers); err != nil {
+		return fmt.Errorf("init cancelled: %w", err)
 	}
 
 	if err := config.Save(config.Config{
-		APIKey:  apiKey,
-		BaseURL: baseURL,
-		Model:   model,
+		APIKey:  strings.TrimSpace(answers.APIKey),
+		BaseURL: strings.TrimSpace(answers.BaseURL),
+		Model:   strings.TrimSpace(answers.Model),
 	}); err != nil {
 		return err
 	}
@@ -167,19 +178,6 @@ func runInit(force bool) error {
 	fmt.Printf("Saved config to %s\n", path)
 	fmt.Println("Run `gcai --help` to see usage.")
 	return nil
-}
-
-func promptWithDefault(reader *bufio.Reader, label, def string) (string, error) {
-	fmt.Printf("%s [%s]: ", label, def)
-	text, err := reader.ReadString('\n')
-	if err != nil {
-		return "", fmt.Errorf("read %s: %w", strings.ToLower(label), err)
-	}
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return def, nil
-	}
-	return text, nil
 }
 
 type settings struct {
