@@ -12,18 +12,11 @@ curl -fsSL https://raw.githubusercontent.com/nsourov/gcai/main/scripts/install.s
 
 The installer downloads the latest release binary and installs `gcai` to `/usr/local/bin`.
 
-### Option B: Homebrew (recommended for macOS)
-
-After tap/formula is published:
+### Option B: Build from source
 
 ```bash
-brew tap nsourov/tap
-brew install gcai
-```
-
-### Option C: Build from source
-
-```bash
+gh repo clone nsourov/gcai
+cd gcai
 go build -o bin/gcai ./cmd/gcai
 ```
 
