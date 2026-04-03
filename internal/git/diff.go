@@ -81,6 +81,21 @@ func Diff(mode DiffMode) (string, error) {
 	}
 }
 
+// AddAll runs `git add -A` from the current working directory (repository root or subdir).
+func AddAll() error {
+	_, err := runGit("add", "-A")
+	return err
+}
+
+// Commit runs `git commit -m <message>`.
+func Commit(message string) error {
+	if strings.TrimSpace(message) == "" {
+		return errors.New("commit message is empty")
+	}
+	_, err := runGit("commit", "-m", message)
+	return err
+}
+
 func runGit(args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	var out bytes.Buffer

@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/AlecAivazis/survey/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/nsourov/gcai/internal/config"
 	commitgit "github.com/nsourov/gcai/internal/git"
 	"github.com/nsourov/gcai/internal/llm"
 	"github.com/nsourov/gcai/internal/prompt"
+	"github.com/nsourov/gcai/internal/update"
 )
 
 const (
@@ -20,12 +20,21 @@ const (
 	defaultModel   = "gpt-4o-mini"
 )
 
+// appVersion is set from main via SetVersion (e.g. -ldflags "-X main.version=v1.0.0").
+var appVersion = "dev"
+
+// SetVersion records the build version for --version output.
+func SetVersion(v string) {
+	if strings.TrimSpace(v) != "" {
+		appVersion = strings.TrimSpace(v)
+	}
+}
+
 type options struct {
 	staged   bool
 	unstaged bool
 	all      bool
-	init     bool
-	force    bool
+	update   bool
 }
 
 func NewRootCmd() *cobra.Command {
@@ -34,9 +43,18 @@ func NewRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "gcai",
 		Short:         "Generate a short commit message from git diff",
+		Version:       appVersion,
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if opts.update {
+				tag, err := update.Run("")
+				if err != nil {
+					return err
+				}
+				fmt.Printf("Installed gcai %s\n", tag)
+				return nil
+			}
 			return run(cmd.Context(), opts)
 		},
 	}
@@ -44,36 +62,65 @@ func NewRootCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&opts.staged, "staged", false, "Use staged diff")
 	cmd.Flags().BoolVar(&opts.unstaged, "unstaged", false, "Use unstaged diff")
 	cmd.Flags().BoolVar(&opts.all, "all", false, "Use both staged and unstaged diff")
-	cmd.Flags().BoolVar(&opts.init, "init", false, "Initialize gcai config interactively")
-	cmd.Flags().BoolVar(&opts.force, "force", false, "Overwrite existing config (use with --init)")
+	cmd.Flags().BoolVar(&opts.update, "update", false, "Download latest release from GitHub and replace this binary")
+
+	cmd.AddCommand(newConfigCmd())
 
 	return cmd
 }
 
 func run(ctx context.Context, opts options) error {
-	if opts.init {
-		return runInit(opts.force)
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	if cfg.AutoCommit {
+		if err := commitgit.EnsureGitRepo(); err != nil {
+			return err
+		}
+		if err := commitgit.AddAll(); err != nil {
+			return err
+		}
+		subject, err := generateCommitSubject(ctx, commitgit.DiffStaged)
+		if err != nil {
+			return err
+		}
+		if err := commitgit.Commit(subject); err != nil {
+			return err
+		}
+		fmt.Printf("Committed: %s\n", subject)
+		return nil
 	}
 
 	mode, err := resolveMode(opts)
 	if err != nil {
 		return err
 	}
-	if err := commitgit.EnsureGitRepo(); err != nil {
+	subject, err := generateCommitSubject(ctx, mode)
+	if err != nil {
 		return err
+	}
+	fmt.Println(subject)
+	return nil
+}
+
+// generateCommitSubject builds the LLM prompt from git state and returns a one-line subject.
+func generateCommitSubject(ctx context.Context, mode commitgit.DiffMode) (string, error) {
+	if err := commitgit.EnsureGitRepo(); err != nil {
+		return "", err
 	}
 
 	diff, err := commitgit.Diff(mode)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if strings.TrimSpace(diff) == "" {
-		return errors.New("no changes found for selected diff mode")
+		return "", errors.New("no changes found for selected diff mode")
 	}
 
 	diffStat, err := commitgit.DiffStat(mode)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	msgs := prompt.BuildMessages(prompt.Input{
@@ -84,7 +131,7 @@ func run(ctx context.Context, opts options) error {
 
 	settings, err := resolveSettings()
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	client := llm.Client{
@@ -92,13 +139,7 @@ func run(ctx context.Context, opts options) error {
 		APIKey:  settings.APIKey,
 		Model:   settings.Model,
 	}
-	subject, err := client.GenerateCommitMessage(ctx, msgs)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println(subject)
-	return nil
+	return client.GenerateCommitMessage(ctx, msgs)
 }
 
 func resolveMode(opts options) (commitgit.DiffMode, error) {
@@ -121,65 +162,6 @@ func resolveMode(opts options) (commitgit.DiffMode, error) {
 	return commitgit.DiffStaged, nil
 }
 
-func runInit(force bool) error {
-	cfg, err := config.Load()
-	if err != nil {
-		return err
-	}
-	if cfg.Exists() && !force {
-		return errors.New("config already exists; re-run with `gcai --init --force` to overwrite")
-	}
-
-	answers := struct {
-		APIKey  string
-		BaseURL string
-		Model   string
-	}{}
-
-	questions := []*survey.Question{
-		{
-			Name: "APIKey",
-			Prompt: &survey.Password{
-				Message: "API key (OpenAI/OpenRouter-compatible):",
-			},
-			Validate: survey.Required,
-		},
-		{
-			Name: "BaseURL",
-			Prompt: &survey.Input{
-				Message: "Base URL:",
-				Default: fallback(cfg.BaseURL, defaultBaseURL),
-			},
-			Validate: survey.Required,
-		},
-		{
-			Name: "Model",
-			Prompt: &survey.Input{
-				Message: "Model:",
-				Default: fallback(cfg.Model, defaultModel),
-			},
-			Validate: survey.Required,
-		},
-	}
-
-	if err := survey.Ask(questions, &answers); err != nil {
-		return fmt.Errorf("init cancelled: %w", err)
-	}
-
-	if err := config.Save(config.Config{
-		APIKey:  strings.TrimSpace(answers.APIKey),
-		BaseURL: strings.TrimSpace(answers.BaseURL),
-		Model:   strings.TrimSpace(answers.Model),
-	}); err != nil {
-		return err
-	}
-
-	path, _ := config.Path()
-	fmt.Printf("Saved config to %s\n", path)
-	fmt.Println("Run `gcai --help` to see usage.")
-	return nil
-}
-
 type settings struct {
 	APIKey  string
 	BaseURL string
@@ -192,10 +174,10 @@ func resolveSettings() (settings, error) {
 		return settings{}, err
 	}
 	if !cfg.Exists() {
-		return settings{}, errors.New("config is missing; run `gcai --init`")
+		return settings{}, errors.New("config is missing; run `gcai config set api_key ...` (and base_url, model)")
 	}
 	if strings.TrimSpace(cfg.APIKey) == "" || strings.TrimSpace(cfg.BaseURL) == "" || strings.TrimSpace(cfg.Model) == "" {
-		return settings{}, errors.New("config is incomplete; run `gcai --init --force`")
+		return settings{}, errors.New("config is incomplete; run `gcai config set` for missing keys")
 	}
 
 	return settings{

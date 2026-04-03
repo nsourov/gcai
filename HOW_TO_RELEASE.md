@@ -33,31 +33,33 @@ TAG=v0.1.0
 VER="${TAG#v}"
 ```
 
+Always pass `-ldflags "-X main.version=${TAG}"` so `gcai --version` matches the release tag.
+
 ### macOS ARM64
 
 ```bash
-GOOS=darwin GOARCH=arm64 go build -o dist/gcai ./cmd/gcai
+GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.version=${TAG}" -o dist/gcai ./cmd/gcai
 tar -C dist -czf "dist/gcai_${VER}_darwin_arm64.tar.gz" gcai
 ```
 
 ### macOS AMD64
 
 ```bash
-GOOS=darwin GOARCH=amd64 go build -o dist/gcai ./cmd/gcai
+GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.version=${TAG}" -o dist/gcai ./cmd/gcai
 tar -C dist -czf "dist/gcai_${VER}_darwin_amd64.tar.gz" gcai
 ```
 
 ### Linux ARM64
 
 ```bash
-GOOS=linux GOARCH=arm64 go build -o dist/gcai ./cmd/gcai
+GOOS=linux GOARCH=arm64 go build -ldflags "-X main.version=${TAG}" -o dist/gcai ./cmd/gcai
 tar -C dist -czf "dist/gcai_${VER}_linux_arm64.tar.gz" gcai
 ```
 
 ### Linux AMD64
 
 ```bash
-GOOS=linux GOARCH=amd64 go build -o dist/gcai ./cmd/gcai
+GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=${TAG}" -o dist/gcai ./cmd/gcai
 tar -C dist -czf "dist/gcai_${VER}_linux_amd64.tar.gz" gcai
 ```
 

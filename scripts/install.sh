@@ -71,4 +71,4 @@ else
 fi
 
 echo "Installed ${BINARY_NAME} to ${INSTALL_DIR}/${BINARY_NAME}"
-echo "Run: ${BINARY_NAME} --init"
+echo "Run: ${BINARY_NAME} config"

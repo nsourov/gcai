@@ -1,123 +1,72 @@
-# git-commit-ai (`gcai`)
+# gcai
 
-`gcai` is a CLI that reads your git diff and generates a short commit message using AI.
+Suggest a one-line git commit message from your diff. Uses an **OpenAI-compatible** HTTP API (OpenAI, OpenRouter, and similar providers).
 
 ## Install
 
-### Option A: Curl installer (no Go required)
+**Release (curl):**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nsourov/gcai/main/scripts/install.sh | bash
 ```
 
-The installer downloads the latest release binary and installs `gcai` to `/usr/local/bin`.
-
-### Option B: Build from source
+**From source:**
 
 ```bash
-gh repo clone nsourov/gcai
+git clone https://github.com/nsourov/gcai.git
 cd gcai
 go build -o bin/gcai ./cmd/gcai
 ```
 
-## First-time setup
+## Configuration
 
-Run the interactive initializer:
-
-```bash
-gcai --init
-```
-
-If your shell already has an alias/function named `gcai`, run the local binary directly:
+Store settings in a JSON file under your user config directory — **no environment variables**. Set values with:
 
 ```bash
-./bin/gcai --init
+gcai config set api_key "your-api-key"
+gcai config set base_url "https://api.openai.com/v1"
+gcai config set model "gpt-4o-mini"
 ```
 
-It prompts for:
+| Key           | Typical value                                                         |
+| ------------- | --------------------------------------------------------------------- |
+| `api_key`     | Provider secret                                                       |
+| `base_url`    | e.g. `https://api.openai.com/v1` or `https://openrouter.ai/api/v1`    |
+| `model`       | e.g. `gpt-4o-mini` or `openai/gpt-4o-mini` (OpenRouter)               |
+| `auto_commit` | `true` or `false` — if `true`, **`gcai`** runs add → message → commit |
 
-- API key (required, from your OpenAI-compatible provider such as OpenAI or OpenRouter)
-- Base URL (default: `https://api.openai.com/v1`)
-- Model (default: `gpt-4o-mini`)
+### Other useful `gcai config` commands
+
+```bash
+gcai config path              # print config file path
+gcai config show              # JSON (API key masked by default)
+gcai config show --plain      # include real API key — only if safe
+gcai config --auto-commit     # store auto_commit=true (used only when you run gcai)
+gcai config --no-auto-commit  # store auto_commit=false
+```
+
+With **`auto_commit`** enabled, **`gcai`** runs `git add -A`, generates a subject from the **staged** diff, then `git commit -m "..."`. Otherwise **`gcai`** only prints a suggested subject (default diff: staged).
 
 ## Usage
 
-Run inside a git repo:
+Run inside a git repository. **Default:** staged diff only (`git diff --staged`), unless **`auto_commit`** is on (then always add-all → staged message → commit).
 
 ```bash
-gcai
+gcai              # subject only, or add+commit when auto_commit is true
+gcai --unstaged   # working tree (ignored if auto_commit is true)
+gcai --all        # staged + unstaged (ignored if auto_commit is true)
+gcai --update     # Update to the latest GitHub release
+gcai --help       # lists flags
 ```
 
-If `gcai` is shadowed by a shell alias/function, use:
-
-```bash
-./bin/gcai
-```
-
-Default mode uses staged changes (`git diff --staged`).
-
-### Flags
-
-- `--init`: run interactive setup and save config
-- `--force`: overwrite existing config (only with `--init`)
-- `--staged`: use staged changes
-- `--unstaged`: use unstaged changes
-- `--all`: use staged + unstaged changes
-- `-h, --help`: show command help
-
-Mode precedence:
-
-- `--all` overrides `--staged` / `--unstaged`
-- `--staged --unstaged` is treated as `--all`
-- no mode flags means staged mode
-
-## Configuration
-
-`gcai` uses only saved config from `gcai --init`.
-
-- If config is missing, it errors and asks you to run `gcai --init`.
-- If any config field is missing, it errors and asks you to run `gcai --init --force`.
-- `--init` will not overwrite existing config unless `--force` is provided.
-
-## Examples
-
-Use staged changes:
-
-```bash
-gcai
-```
-
-Use unstaged changes:
-
-```bash
-gcai --unstaged
-```
-
-Use all changes:
-
-```bash
-gcai --all
-```
-
-Use in commit flow:
+Example:
 
 ```bash
 git add .
 git commit -m "$(gcai)"
 ```
 
-Reconfigure:
-
-```bash
-gcai --init --force
-```
-
-## Requirements
-
-- `git` installed and available in `PATH`
-- OpenAI-compatible API credentials (for example OpenAI or OpenRouter)
-
 ## Notes
 
-- Diffs can contain secrets; review before sending to remote LLM APIs.
-- Very large diffs are truncated before API submission.
+- Diffs may contain secrets; review before calling a remote API.
+- Large diffs are truncated before the request.
