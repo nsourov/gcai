@@ -56,6 +56,7 @@ gcai              # subject only, or add+commit when auto_commit is true
 gcai --unstaged   # working tree (ignored if auto_commit is true)
 gcai --all        # staged + unstaged (ignored if auto_commit is true)
 gcai --update     # Update to the latest GitHub release
+gcai version        # CLI build version (same as gcai --version)
 gcai --help       # lists flags
 ```
 

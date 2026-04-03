@@ -20,14 +20,19 @@ const (
 	defaultModel   = "gpt-4o-mini"
 )
 
-// appVersion is set from main via SetVersion (e.g. -ldflags "-X main.version=v1.0.0").
+// appVersion is the gcai CLI build version (not the LLM model); set from main via SetVersion.
 var appVersion = "dev"
 
-// SetVersion records the build version for --version output.
+// SetVersion records the CLI build version for gcai version / gcai --version.
 func SetVersion(v string) {
 	if strings.TrimSpace(v) != "" {
 		appVersion = strings.TrimSpace(v)
 	}
+}
+
+// Version returns the gcai CLI build version (e.g. v0.1.0, or dev).
+func Version() string {
+	return appVersion
 }
 
 type options struct {
@@ -65,8 +70,22 @@ func NewRootCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&opts.update, "update", false, "Download latest release from GitHub and replace this binary")
 
 	cmd.AddCommand(newConfigCmd())
+	cmd.AddCommand(newVersionCmd())
 
 	return cmd
+}
+
+func newVersionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:           "version",
+		Short:         "Print the gcai CLI version (build)",
+		SilenceErrors: true,
+		SilenceUsage:  true,
+		Args:          cobra.NoArgs,
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Fprintln(cmd.OutOrStdout(), appVersion)
+		},
+	}
 }
 
 func run(ctx context.Context, opts options) error {

@@ -24,8 +24,11 @@ func newConfigCmd() *cobra.Command {
 	var noAutoCommit bool
 
 	cmd := &cobra.Command{
-		Use:           "config",
-		Short:         "Config file helpers (set, show, path); --auto-commit / --no-auto-commit store preferences for gcai",
+		Use: "config [flags]\n" +
+			"  set <key> <value>  keys: api_key, base_url, model, auto_commit\n" +
+			"  aliases: apikey|key, baseurl|url, autocommit",
+		Short: "Config file helpers (set, show, path); --auto-commit / --no-auto-commit store preferences for gcai",
+		Long:  "Manage the gcai JSON config (subcommands: path, show, set).",
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -61,8 +64,15 @@ func newConfigCmd() *cobra.Command {
 
 func newConfigSetCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:           "set <key> <value>",
-		Short:         "Set one config field (merges with existing file)",
+		Use:   "set <key> <value>",
+		Short: "Set one config field (merges with existing file)",
+		Long: `Set a single key in the config file.
+
+Keys: api_key, base_url, model, auto_commit (true/false)
+
+Examples:
+  gcai config set api_key "sk-..."
+  gcai config set auto_commit true`,
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		Args:          cobra.MinimumNArgs(2),
